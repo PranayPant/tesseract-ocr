@@ -12,6 +12,17 @@ from pathlib import Path
 # On Linux/macOS, it's usually found automatically if installed correctly.
 
 
+def get_base_info(image_path):
+    image_path_obj = Path(image_path)
+    base_name = image_path_obj.stem
+    ext = image_path_obj.suffix
+
+    # Ensure data directory exists
+    data_dir = Path("data/preprocessed")
+    data_dir.mkdir(exist_ok=True)
+    return base_name, ext
+
+
 def preprocess_image(image_path):
     """
     Preprocess image using OpenCV to improve OCR accuracy
@@ -22,22 +33,30 @@ def preprocess_image(image_path):
     if img is None:
         raise ValueError(f"Could not load image from {image_path}")
 
+    base_name, ext = get_base_info(image_path)
+
     denoisedColor = cv2.fastNlMeansDenoisingColored(img, None, 10, 10, 7, 21)
+    cv2.imwrite(
+        f"data/preprocessed/{base_name}_01_denoised{ext}", denoisedColor)
 
     # Convert to grayscale
     gray = cv2.cvtColor(denoisedColor, cv2.COLOR_BGR2GRAY)
+    cv2.imwrite(f"data/preprocessed/{base_name}_02_gray{ext}", gray)
 
     # Apply Gaussian blur to reduce noise
     blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+    cv2.imwrite(f"data/preprocessed/{base_name}_03_blurred{ext}", blurred)
 
     kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]])
     sharpened = cv2.filter2D(blurred, -1, kernel)
+    cv2.imwrite(f"data/preprocessed/{base_name}_04_sharpened{ext}", sharpened)
 
     # Can also apply adaptive thresholding to get better contrast
     # This works better than simple thresholding for varying lighting conditions
     # Use regular thresholding instead for now
     thresh = cv2.threshold(
         sharpened, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+    cv2.imwrite(f"data/preprocessed/{base_name}_05_thresh{ext}", thresh)
 
     # Optional: Apply morphological operations to clean up the image
     # kernel = np.ones((2, 2), np.uint8)
@@ -46,7 +65,9 @@ def preprocess_image(image_path):
     # Convert back to PIL Image format for pytesseract
     # Make sure DPI is at least 300 for better OCR results
     pil_image = Image.fromarray(thresh)
-    pil_image.save(image_path, dpi=(300, 300))  # Save with 300 DPI
+    # Save with 300 DPI
+    pil_image.save(
+        f"data/preprocessed/{base_name}_05_thresh{ext}", dpi=(300, 300))
 
 
 def main():
@@ -71,8 +92,10 @@ def main():
         print("Image preprocessing completed")
 
         # Always load the image with PIL for Tesseract
-        img = Image.open(args.image_path)
-        print(f"Processing image: {args.image_path}")
+        base_name, ext = get_base_info(args.image_path)
+        final_image_path = f"data/preprocessed/{base_name}_05_thresh{ext}"
+        img = Image.open(final_image_path)
+        print(f"Processing image: {final_image_path}")
     except FileNotFoundError:
         print(
             f"Error: '{args.image_path}' not found. Please provide a valid image file.")
@@ -85,12 +108,13 @@ def main():
 
     text = pytesseract.image_to_string(
         img, lang=args.lang, config=config)
-    print("Extracted Text:")
-    print(text)
 
     # Save to file if requested
     if args.save_file:
         save_text_to_file(args.image_path, text)
+    else:
+        print("Extracted Text:")
+        print(text)
 
 
 def save_text_to_file(image_path, text_content):
