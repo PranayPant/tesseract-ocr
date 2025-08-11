@@ -14,15 +14,36 @@ from pathlib import Path
 lang = "eng"  # Default language for OCR
 config = "--tessdata-dir /usr/share/tesseract-ocr/5/tessdata --oem 3 --psm 3"
 
+# Global directories object - initialized in main()
+DIRS = None
+
+
+def setup_directories(base_name):
+    """
+    Create all necessary directories for processing and return path objects
+    """
+    base_dir = Path("data")
+
+    # Define all directory paths
+    directories = {
+        "base": base_dir,
+        "preprocessed": base_dir / "preprocessed" / base_name,
+        "roi": base_dir / "roi" / base_name,
+        "results": base_dir / "results",
+    }
+
+    # Create all directories
+    for dir_path in directories.values():
+        dir_path.mkdir(parents=True, exist_ok=True)
+
+    return directories
+
 
 def get_base_info(image_path):
     image_path_obj = Path(image_path)
     base_name = image_path_obj.stem
     ext = image_path_obj.suffix
 
-    # Ensure data directory exists
-    data_dir = Path("data/preprocessed")
-    data_dir.mkdir(exist_ok=True)
     return base_name, ext
 
 
@@ -151,7 +172,8 @@ def find_text_regions(binary, gray, image_path):
             # Extract ROI from the original grayscale image for OCR
             # Using grayscale ROI for Tesseract is often better, as it handles its own binarization
             roi_gray = gray[y : y + h, x : x + w]
-            cv2.imwrite(f"data/roi/{base_name}_roi_{i}_{x}x{y}{ext}", roi_gray)
+            roi_path = DIRS["roi"] / f"{base_name}_roi_{i}_{x}x{y}{ext}"
+            cv2.imwrite(str(roi_path), roi_gray)
 
             # Perform OCR
             ocr_text = pytesseract.image_to_string(
@@ -239,10 +261,8 @@ def find_text_regions(binary, gray, image_path):
             )
 
     # Save the image with detected text regions for debugging
-    cv2.imwrite(
-        f"data/preprocessed/{base_name}_text_regions{ext}",
-        original_img_for_drawing,
-    )
+    text_regions_path = DIRS["preprocessed"] / f"{base_name}_text_regions{ext}"
+    cv2.imwrite(str(text_regions_path), original_img_for_drawing)
 
     # Save all OCR results to a single text file
     save_roi_ocr_results(base_name, ocr_results)
@@ -252,12 +272,8 @@ def find_text_regions(binary, gray, image_path):
 
 def save_roi_ocr_results(base_name, ocr_results):
     """Save all ROI OCR results to a single text file"""
-    # Ensure data directory exists
-    data_dir = Path("data")
-    data_dir.mkdir(exist_ok=True)
-
     output_filename = f"{base_name}_roi_ocr_results.txt"
-    output_path = data_dir / output_filename
+    output_path = DIRS["results"] / output_filename
 
     try:
         with open(output_path, "w", encoding="utf-8") as f:
@@ -294,20 +310,26 @@ def preprocess_image(image_path):
 
     denoisedColor = cv2.fastNlMeansDenoisingColored(img, None, 10, 10, 7, 21)
     cv2.imwrite(
-        f"data/preprocessed/{base_name}_01_denoised{ext}", denoisedColor
+        str(DIRS["preprocessed"] / f"{base_name}_01_denoised{ext}"),
+        denoisedColor,
     )
 
     # Convert to grayscale
     gray = cv2.cvtColor(denoisedColor, cv2.COLOR_BGR2GRAY)
-    cv2.imwrite(f"data/preprocessed/{base_name}_02_gray{ext}", gray)
+    cv2.imwrite(str(DIRS["preprocessed"] / f"{base_name}_02_gray{ext}"), gray)
 
     # Apply Gaussian blur to reduce noise
     blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-    cv2.imwrite(f"data/preprocessed/{base_name}_03_blurred{ext}", blurred)
+    cv2.imwrite(
+        str(DIRS["preprocessed"] / f"{base_name}_03_blurred{ext}"), blurred
+    )
 
     kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]])
     sharpened = cv2.filter2D(blurred, -1, kernel)
-    cv2.imwrite(f"data/preprocessed/{base_name}_04_sharpened{ext}", sharpened)
+    cv2.imwrite(
+        str(DIRS["preprocessed"] / f"{base_name}_04_sharpened{ext}"),
+        sharpened,
+    )
 
     # Can also apply adaptive thresholding to get better contrast
     # This works better than simple thresholding for varying lighting conditions
@@ -315,7 +337,9 @@ def preprocess_image(image_path):
     thresh = cv2.threshold(
         sharpened, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU
     )[1]
-    cv2.imwrite(f"data/preprocessed/{base_name}_05_thresh{ext}", thresh)
+    cv2.imwrite(
+        str(DIRS["preprocessed"] / f"{base_name}_05_thresh{ext}"), thresh
+    )
 
     # Optional: Apply morphological operations to clean up the image
     # kernel = np.ones((2, 2), np.uint8)
@@ -328,7 +352,8 @@ def preprocess_image(image_path):
     pil_image = Image.fromarray(thresh)
     # Save with 300 DPI
     pil_image.save(
-        f"data/preprocessed/{base_name}_05_thresh{ext}", dpi=(300, 300)
+        str(DIRS["preprocessed"] / f"{base_name}_05_thresh{ext}"),
+        dpi=(300, 300),
     )
 
 
@@ -362,14 +387,18 @@ def main():
 
     # Preprocess and load the image
     try:
+        # Setup directories once for the entire process
+        base_name, ext = get_base_info(args.image_path)
+        global DIRS
+        DIRS = setup_directories(base_name)
+
         print(f"Preprocessing image: {args.image_path}")
         preprocess_image(args.image_path)
         print("Image preprocessing completed")
 
         # Always load the image with PIL for Tesseract
-        base_name, ext = get_base_info(args.image_path)
-        final_image_path = f"data/preprocessed/{base_name}_05_thresh{ext}"
-        img = Image.open(final_image_path)
+        final_image_path = DIRS["preprocessed"] / f"{base_name}_05_thresh{ext}"
+        img = Image.open(str(final_image_path))
         print(f"Processing image: {final_image_path}")
     except FileNotFoundError:
         print(
@@ -391,7 +420,7 @@ def main():
 
 
 def save_text_to_file(image_path, text_content):
-    """Save OCR text content to a file in the data directory with same base name as image"""
+    """Save OCR text content to a file in the results directory with same base name as image"""
     # Get the base name of the image file without extension
     image_path_obj = Path(image_path)
     base_name = image_path_obj.stem
@@ -399,12 +428,8 @@ def save_text_to_file(image_path, text_content):
     # Create output filename with .txt extension
     output_filename = f"{base_name}_ocr_result.txt"
 
-    # Ensure data directory exists
-    data_dir = Path("data")
-    data_dir.mkdir(exist_ok=True)
-
-    # Full output path
-    output_path = data_dir / output_filename
+    # Use global directories
+    output_path = DIRS["results"] / output_filename
 
     try:
         with open(output_path, "w", encoding="utf-8") as f:
