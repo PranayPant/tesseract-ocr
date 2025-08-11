@@ -334,9 +334,15 @@ def preprocess_image(image_path):
     # Can also apply adaptive thresholding to get better contrast
     # This works better than simple thresholding for varying lighting conditions
     # Use regular thresholding instead for now
-    thresh = cv2.threshold(
-        sharpened, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU
-    )[1]
+    # thresh = cv2.threshold(
+    #     sharpened, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU
+    # )[1]
+
+    # C: Constant subtracted from the mean. Tune this to adjust sensitivity (positive for bolder text, negative for thinner).
+    thresh = cv2.adaptiveThreshold(
+        gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 15, 18
+    )  # Default values: blockSize=15, C=4
+
     cv2.imwrite(
         str(DIRS["preprocessed"] / f"{base_name}_05_thresh{ext}"), thresh
     )
@@ -397,7 +403,9 @@ def main():
         print("Image preprocessing completed")
 
         # Always load the image with PIL for Tesseract
-        final_image_path = DIRS["preprocessed"] / f"{base_name}_05_thresh{ext}"
+        final_image_path = (
+            DIRS["preprocessed"] / f"{base_name}_04_sharpened{ext}"
+        )
         img = Image.open(str(final_image_path))
         print(f"Processing image: {final_image_path}")
     except FileNotFoundError:
