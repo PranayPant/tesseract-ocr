@@ -155,8 +155,8 @@ def find_text_regions(binary, gray, image_path):
                 (x, y - 5),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.5,
-                (0, 0, 255),
-                1,
+                (0, 0, 0),
+                2,
             )
             continue  # Skip this contour, it's a line
 
@@ -215,15 +215,15 @@ def find_text_regions(binary, gray, image_path):
                     (0, 255, 0),
                     5,
                 )
-                # cv2.putText(
-                #     original_img_for_drawing,
-                #     cleaned_ocr_text,
-                #     (x, y - 5),
-                #     cv2.FONT_HERSHEY_SIMPLEX,
-                #     0.6,
-                #     (0, 165, 255),
-                #     2,
-                # )
+                cv2.putText(
+                    original_img_for_drawing,
+                    f"ROI {i}",
+                    (x, y - 5),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.6,
+                    (0, 0, 0),
+                    2,
+                )
             else:
                 # It looked like text by shape, but OCR failed to find meaningful text.
                 # Re-classify as non-text.
@@ -237,12 +237,12 @@ def find_text_regions(binary, gray, image_path):
                 )
                 cv2.putText(
                     original_img_for_drawing,
-                    "Non-Text (OCR Fail)",
+                    f"Non-Text (OCR Fail): ROI {i}",
                     (x, y - 5),
                     cv2.FONT_HERSHEY_SIMPLEX,
                     0.5,
-                    (255, 0, 0),
-                    1,
+                    (0, 0, 0),
+                    2,
                 )
         else:
             # This contour didn't even pass the initial shape-based text criteria
@@ -252,12 +252,12 @@ def find_text_regions(binary, gray, image_path):
             )
             cv2.putText(
                 original_img_for_drawing,
-                "Other Non-Text",
+                f"Other Non-Text: ROI {i}",
                 (x, y - 5),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.5,
-                (0, 0, 255),
-                1,
+                (0, 0, 0),
+                2,
             )
 
     # Save the image with detected text regions for debugging
